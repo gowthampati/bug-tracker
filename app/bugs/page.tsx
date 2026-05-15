@@ -16,6 +16,7 @@ type Bug = {
   description: string;
   status: string;
   priority: string;
+  assigned_to: string;
   updated_at: string;
   comments?: Comment[];
 };
@@ -24,6 +25,7 @@ export default function BugsPage() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState("Medium");
+  const [assignedTo, setAssignedTo] = useState("");
   const [bugs, setBugs] = useState<Bug[]>([]);
   const [search, setSearch] = useState("");
   const [filterPriority, setFilterPriority] = useState("");
@@ -79,6 +81,7 @@ const { data, error } = await query.order(
         title,
         description,
         priority,
+        assigned_to: assignedTo,
       },
     ]);
 
@@ -90,6 +93,7 @@ const { data, error } = await query.order(
     setTitle("");
     setDescription("");
     setPriority("Medium");
+    setAssignedTo("");
     fetchBugs();
   };
 const handleDeleteBug = async (id: number) => {
@@ -113,6 +117,24 @@ const handleStatusChange = async (
     .from("bugs")
     .update({
       status: newStatus,
+    })
+    .eq("id", id);
+
+  if (error) {
+    alert(error.message);
+    return;
+  }
+
+  fetchBugs();
+};
+const handleAssignBug = async (
+  id: number,
+  assignee: string
+) => {
+  const { error } = await supabase
+    .from("bugs")
+    .update({
+      assigned_to: assignee,
     })
     .eq("id", id);
 
@@ -186,7 +208,7 @@ const handleAddComment = async (
           value={description}
           onChange={(e) => setDescription(e.target.value)}
         />
-        <select
+       <select
   className="w-full border p-2"
   value={priority}
   onChange={(e) => setPriority(e.target.value)}
@@ -196,6 +218,15 @@ const handleAddComment = async (
   <option>High</option>
   <option>Critical</option>
 </select>
+
+<input
+  className="w-full border p-2"
+  placeholder="Assign to"
+  value={assignedTo}
+  onChange={(e) =>
+    setAssignedTo(e.target.value)
+  }
+/>
         <button
           onClick={handleCreateBug}
           className="bg-black px-4 py-2 text-white"
@@ -285,6 +316,40 @@ const handleAddComment = async (
     >
       Priority: {bug.priority}
     </span>
+    <div className="flex items-center gap-2">
+  <span>Assigned:</span>
+
+  <select
+    className="border p-1 text-sm"
+    value={bug.assigned_to || ""}
+    onChange={(e) =>
+      handleAssignBug(
+        bug.id,
+        e.target.value
+      )
+    }
+  >
+    <option value="">
+      Unassigned
+    </option>
+
+    <option value="Rahul">
+      Rahul
+    </option>
+
+    <option value="Priya">
+      Priya
+    </option>
+
+    <option value="Arjun">
+      Arjun
+    </option>
+
+    <option value="Sneha">
+      Sneha
+    </option>
+  </select>
+</div>
   </div>
 
   <button
