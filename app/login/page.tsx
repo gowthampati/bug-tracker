@@ -45,12 +45,22 @@ export default function LoginPage() {
           onChange={(e) => setPassword(e.target.value)}
         />
 
-        <button
-          onClick={handleLogin}
-          className="w-full bg-black p-2 text-white"
-        >
-          Login
-        </button>
+       <button
+  onClick={handleLogin}
+  className="w-full bg-black p-2 text-white"
+>
+  Login
+</button>
+
+<p className="mt-4 text-sm">
+  Don&apos;t have an account?{" "}
+  <a
+    href="/register"
+    className="text-blue-500 underline"
+  >
+    Register
+  </a>
+</p>
       </div>
     </div>
   );

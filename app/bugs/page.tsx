@@ -7,11 +7,13 @@ import { allowedTransitions } from "@/lib/workflow";
 type ActivityLog = {
   id: number;
   action: string;
+  actor: string;
   created_at: string;
 };
 type Comment = {
   id: number;
   body: string;
+  author: string;
   created_at: string;
 };
 type Bug = {
@@ -21,9 +23,11 @@ type Bug = {
   status: string;
   priority: string;
   assigned_to: string;
+  reporter: string;
   updated_at: string;
   comments?: Comment[];
   activity_logs?: ActivityLog[];
+  
 };
 
 export default function BugsPage() {
@@ -34,21 +38,35 @@ export default function BugsPage() {
   const [bugs, setBugs] = useState<Bug[]>([]);
   const [search, setSearch] = useState("");
   const [filterPriority, setFilterPriority] = useState("");
+  const [filterStatus, setFilterStatus] = useState("");
+
+  const [sortField, setSortField] =
+  useState("created_at");
+
+const [sortOrder, setSortOrder] =
+  useState("desc");
+  const [page, setPage] = useState(1);
+
+const PAGE_SIZE = 5;
   const [commentText, setCommentText] = useState("");
+  const [userEmail, setUserEmail] =
+  useState("");
   const fetchBugs = async () => {
     let query = supabase
   .from("bugs")
   .select(`
   *,
   comments (
-    id,
-    body,
-    created_at
-  )
+  id,
+  body,
+  author,
+  created_at
+)
     ,
 activity_logs (
   id,
   action,
+  actor,
   created_at
 )
 `);
@@ -65,10 +83,21 @@ if (filterPriority) {
     filterPriority
   );
 }
-const { data, error } = await query.order(
-  "created_at",
-  { ascending: false }
-);
+if (filterStatus) {
+  query = query.eq(
+    "status",
+    filterStatus
+  );
+}
+const from = (page - 1) * PAGE_SIZE;
+
+const to = from + PAGE_SIZE - 1;
+
+const { data, error } = await query
+  .order(sortField, {
+    ascending: sortOrder === "asc",
+  })
+  .range(from, to);
 
     if (error) {
       console.log(error);
@@ -79,8 +108,30 @@ const { data, error } = await query.order(
   };
 
  useEffect(() => {
+    supabase.auth.getUser().then(
+  ({ data }) => {
+    setUserEmail(
+      data.user?.email || ""
+    );
+  }
+);
+supabase.auth.getSession().then(
+  ({ data }) => {
+    if (!data.session) {
+      window.location.href =
+        "/login";
+    }
+  }
+);
   fetchBugs();
-}, [search, filterPriority]);
+}, [
+  search,
+  filterPriority,
+  filterStatus,
+  sortField,
+  sortOrder,
+  page,
+]);
   const handleCreateBug = async () => {
     if (!title.trim()) {
       alert("Title is required");
@@ -93,6 +144,7 @@ const { data, error } = await query.order(
         description,
         priority,
         assigned_to: assignedTo,
+        reporter: userEmail,
       },
     ]);
 
@@ -140,6 +192,7 @@ await supabase
   .insert([
     {
       bug_id: id,
+      actor: userEmail,
       action: `Status changed to ${newStatus}`,
     },
   ]);
@@ -165,9 +218,39 @@ await supabase
   .insert([
     {
       bug_id: id,
+      actor: userEmail,
       action: `Assigned to ${assignee}`,
     },
   ]);
+  fetchBugs();
+};
+const handleUpdateBug = async (
+  id: number,
+  field: string,
+  value: string
+) => {
+  const { error } = await supabase
+    .from("bugs")
+    .update({
+      [field]: value,
+    })
+    .eq("id", id);
+
+  if (error) {
+    alert(error.message);
+    return;
+  }
+
+  await supabase
+    .from("activity_logs")
+    .insert([
+      {
+        bug_id: id,
+        actor: userEmail,
+        action: `${field} changed to ${value}`,
+      },
+    ]);
+
   fetchBugs();
 };
 const handleLogout = async () => {
@@ -190,6 +273,7 @@ const handleAddComment = async (
       {
         bug_id: bugId,
         body: commentText,
+        author: userEmail,
       },
     ]);
 
@@ -199,7 +283,15 @@ const handleAddComment = async (
   }
 
   setCommentText("");
-
+  await supabase
+  .from("activity_logs")
+  .insert([
+    {
+      bug_id: bugId,
+      actor: userEmail,
+      action: "Comment added",
+    },
+  ]);
   fetchBugs();
 };
   return (
@@ -244,14 +336,33 @@ const handleAddComment = async (
   <option>Critical</option>
 </select>
 
-<input
+<select
   className="w-full border p-2"
-  placeholder="Assign to"
   value={assignedTo}
   onChange={(e) =>
     setAssignedTo(e.target.value)
   }
-/>
+>
+  <option value="">
+    Unassigned
+  </option>
+
+  <option value="rahul@gmail.com">
+    rahul@gmail.com
+  </option>
+
+  <option value="priya@gmail.com">
+    priya@gmail.com
+  </option>
+
+  <option value="arjun@gmail.com">
+    arjun@gmail.com
+  </option>
+
+  <option value="sneha@gmail.com">
+    sneha@gmail.com
+  </option>
+</select>
         <button
           onClick={handleCreateBug}
           className="bg-black px-4 py-2 text-white"
@@ -270,9 +381,11 @@ const handleAddComment = async (
   <select
     className="border p-2"
     value={filterPriority}
+    
     onChange={(e) =>
       setFilterPriority(e.target.value)
     }
+    
   >
     <option value="">All Priorities</option>
     <option value="Low">Low</option>
@@ -280,6 +393,68 @@ const handleAddComment = async (
     <option value="High">High</option>
     <option value="Critical">Critical</option>
   </select>
+  <select
+  className="border p-2"
+  value={filterStatus}
+  onChange={(e) =>
+    setFilterStatus(e.target.value)
+  }
+>
+  <option value="">
+    All Statuses
+  </option>
+
+  <option value="Open">
+    Open
+  </option>
+
+  <option value="In Progress">
+    In Progress
+  </option>
+
+  <option value="Resolved">
+    Resolved
+  </option>
+
+  <option value="Closed">
+    Closed
+  </option>
+</select>
+<select
+  className="border p-2"
+  value={sortField}
+  onChange={(e) =>
+    setSortField(e.target.value)
+  }
+>
+  <option value="created_at">
+    Created Date
+  </option>
+
+  <option value="updated_at">
+    Updated Date
+  </option>
+
+  <option value="priority">
+    Priority
+  </option>
+</select>
+
+<select
+  className="border p-2"
+  value={sortOrder}
+  onChange={(e) =>
+    setSortOrder(e.target.value)
+  }
+>
+  <option value="desc">
+    Desc
+  </option>
+
+  <option value="asc">
+    Asc
+  </option>
+</select>
 </div>
       <div className="space-y-4">
         {bugs.map((bug) => (
@@ -287,13 +462,31 @@ const handleAddComment = async (
             key={bug.id}
             className="rounded border p-4"
           >
-            <h2 className="text-xl font-semibold">
-              {bug.title}
-            </h2>
+            <p className="text-sm text-gray-400">
+  Bug ID: {bug.id}
+</p>
+            <a
+  href={`/bugs/${bug.id}`}
+  className="text-xl font-semibold text-blue-600 underline"
+>
+  {bug.title}
+</a>
 
-            <p className="mt-2 text-gray-600">
-              {bug.description}
-            </p>
+            <textarea
+  className="mt-2 w-full border p-2 text-gray-600"
+  value={bug.description || ""}
+  onChange={(e) =>
+    handleUpdateBug(
+      bug.id,
+      "description",
+      e.target.value
+    )
+  }
+/>
+
+<p className="text-sm text-gray-500">
+  Reporter: {bug.reporter}
+</p>
             <p className="mt-2 text-sm text-gray-400">
   Last updated:{" "}
   {new Date(
@@ -328,19 +521,32 @@ const handleAddComment = async (
   </select>
 </div>
 
-    <span
-      className={`font-semibold ${
-        bug.priority === "Critical"
-          ? "text-red-500"
-          : bug.priority === "High"
-          ? "text-orange-400"
-          : bug.priority === "Medium"
-          ? "text-yellow-400"
-          : "text-green-400"
-      }`}
-    >
-      Priority: {bug.priority}
-    </span>
+    <select
+  className={`border p-1 font-semibold ${
+    bug.priority === "Critical"
+      ? "text-red-500"
+      : bug.priority === "High"
+      ? "text-orange-400"
+      : bug.priority === "Medium"
+      ? "text-yellow-400"
+      : "text-green-400"
+  }`}
+  value={bug.priority}
+  onChange={(e) =>
+    handleUpdateBug(
+      bug.id,
+      "priority",
+      e.target.value
+    )
+  }
+>
+  <option value="Low">Low</option>
+  <option value="Medium">Medium</option>
+  <option value="High">High</option>
+  <option value="Critical">
+    Critical
+  </option>
+</select>
     <div className="flex items-center gap-2">
   <span>Assigned:</span>
 
@@ -358,21 +564,21 @@ const handleAddComment = async (
       Unassigned
     </option>
 
-    <option value="Rahul">
-      Rahul
-    </option>
+    <option value="rahul@gmail.com">
+  rahul@gmail.com
+</option>
 
-    <option value="Priya">
-      Priya
-    </option>
+<option value="priya@gmail.com">
+  priya@gmail.com
+</option>
 
-    <option value="Arjun">
-      Arjun
-    </option>
+<option value="arjun@gmail.com">
+  arjun@gmail.com
+</option>
 
-    <option value="Sneha">
-      Sneha
-    </option>
+<option value="sneha@gmail.com">
+  sneha@gmail.com
+</option>
   </select>
 </div>
   </div>
@@ -396,7 +602,10 @@ const handleAddComment = async (
       <div
         key={comment.id}
         className="rounded border p-2 text-sm"
-      >
+      > 
+      <p className="text-xs font-semibold">
+  {comment.author}
+</p>
         <p>{comment.body}</p>
 
         <p className="mt-1 text-xs text-gray-400">
@@ -438,7 +647,7 @@ const handleAddComment = async (
         key={log.id}
         className="text-sm text-gray-500"
       >
-        • {log.action}
+        • {log.actor}: {log.action}
 
         <span className="ml-2 text-xs">
           {new Date(
@@ -452,8 +661,33 @@ const handleAddComment = async (
 </div>
 
           </div>
-        ))}
+                ))}
       </div>
+
+<div className="mt-6 flex gap-4">
+  <button
+    disabled={page === 1}
+    onClick={() =>
+      setPage(page - 1)
+    }
+    className="rounded border px-4 py-2"
+  >
+    Previous
+  </button>
+
+  <span>
+    Page {page}
+  </span>
+
+  <button
+    onClick={() =>
+      setPage(page + 1)
+    }
+    className="rounded border px-4 py-2"
+  >
+    Next
+  </button>
+</div>
     </div>
   );
 }
