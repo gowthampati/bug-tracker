@@ -4,7 +4,11 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { allowedTransitions } from "@/lib/workflow";
-
+type ActivityLog = {
+  id: number;
+  action: string;
+  created_at: string;
+};
 type Comment = {
   id: number;
   body: string;
@@ -19,6 +23,7 @@ type Bug = {
   assigned_to: string;
   updated_at: string;
   comments?: Comment[];
+  activity_logs?: ActivityLog[];
 };
 
 export default function BugsPage() {
@@ -40,6 +45,12 @@ export default function BugsPage() {
     body,
     created_at
   )
+    ,
+activity_logs (
+  id,
+  action,
+  created_at
+)
 `);
 
 if (search.trim()) {
@@ -124,7 +135,14 @@ const handleStatusChange = async (
     alert(error.message);
     return;
   }
-
+await supabase
+  .from("activity_logs")
+  .insert([
+    {
+      bug_id: id,
+      action: `Status changed to ${newStatus}`,
+    },
+  ]);
   fetchBugs();
 };
 const handleAssignBug = async (
@@ -142,7 +160,14 @@ const handleAssignBug = async (
     alert(error.message);
     return;
   }
-
+await supabase
+  .from("activity_logs")
+  .insert([
+    {
+      bug_id: id,
+      action: `Assigned to ${assignee}`,
+    },
+  ]);
   fetchBugs();
 };
 const handleLogout = async () => {
@@ -402,6 +427,28 @@ const handleAddComment = async (
       Add
     </button>
   </div>
+<div className="mt-4 border-t pt-4">
+  <h3 className="mb-2 font-semibold">
+    Activity
+  </h3>
+
+  <div className="space-y-2">
+    {bug.activity_logs?.map((log) => (
+      <div
+        key={log.id}
+        className="text-sm text-gray-500"
+      >
+        • {log.action}
+
+        <span className="ml-2 text-xs">
+          {new Date(
+            log.created_at
+          ).toLocaleString()}
+        </span>
+      </div>
+    ))}
+  </div>
+</div>
 </div>
 
           </div>
